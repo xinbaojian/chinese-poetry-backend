@@ -187,7 +187,7 @@ pub async fn get_poem(
     Path(id): Path<u64>,
 ) -> Result<impl IntoResponse, AppError> {
     let poem: PoemRow = sqlx::query_as(
-        "SELECT id, title, poet_id, dynasty, category, grade, content, translation, source_id, created_at, updated_at \
+        "SELECT id, title, poet_id, dynasty, category, grade, CAST(content AS CHAR) AS content, translation, source_id, created_at, updated_at \
          FROM poems WHERE id = ?",
     )
     .bind(id)

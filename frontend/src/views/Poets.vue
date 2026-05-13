@@ -1,71 +1,118 @@
 <template>
   <div>
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-      <h2 style="margin: 0;">诗人管理</h2>
-      <el-button type="primary" @click="openCreate">添加诗人</el-button>
+    <div class="page-header">
+      <h2>诗人管理</h2>
+      <button class="btn btn-primary" @click="openCreate">+ 添加诗人</button>
     </div>
 
     <!-- Filters -->
-    <el-form :inline="true" :model="filters" style="margin-bottom: 12px;">
-      <el-form-item label="搜索">
-        <el-input v-model="filters.keyword" placeholder="诗人名称" clearable @keyup.enter="search" />
-      </el-form-item>
-      <el-form-item label="朝代">
-        <el-select v-model="filters.dynasty" placeholder="全部" clearable style="width: 140px;">
-          <el-option v-for="d in dynasties" :key="d" :label="d" :value="d" />
-        </el-select>
-      </el-form-item>
-      <el-form-item>
-        <el-button type="primary" @click="search">搜索</el-button>
-      </el-form-item>
-    </el-form>
-
-    <!-- Table -->
-    <el-table :data="poets" v-loading="loading" stripe>
-      <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="name" label="姓名" />
-      <el-table-column prop="dynasty" label="朝代" width="100" />
-      <el-table-column prop="created_at" label="创建时间" width="180" />
-      <el-table-column label="操作" width="160" fixed="right">
-        <template #default="{ row }">
-          <el-button size="small" @click="openEdit(row)">编辑</el-button>
-          <el-button size="small" type="danger" @click="handleDelete(row.id)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
-
-    <div style="display: flex; justify-content: center; margin-top: 16px;">
-      <el-pagination
-        v-model:current-page="page"
-        :page-size="20"
-        :total="total"
-        layout="prev, pager, next"
-        @current-change="fetchData"
-      />
+    <div class="filters-bar">
+      <div class="filter-item">
+        <span class="filter-label">搜索</span>
+        <input
+          v-model="filters.keyword"
+          class="input"
+          placeholder="诗人名称"
+          style="width: 180px;"
+          @keyup.enter="search"
+        />
+      </div>
+      <div class="filter-item">
+        <span class="filter-label">朝代</span>
+        <select v-model="filters.dynasty" class="input select" style="width: 140px;" @change="search">
+          <option value="">全部</option>
+          <option v-for="d in dynasties" :key="d" :value="d">{{ d }}</option>
+        </select>
+      </div>
+      <div class="filter-item" style="align-self: flex-end;">
+        <button class="btn btn-primary btn-sm" @click="search">搜索</button>
+      </div>
     </div>
 
-    <!-- Create / Edit Dialog -->
-    <el-dialog v-model="dialogVisible" :title="isEdit ? '编辑诗人' : '添加诗人'" width="480px">
-      <el-form :model="form" label-width="80px">
-        <el-form-item label="姓名">
-          <el-input v-model="form.name" placeholder="诗人姓名" />
-        </el-form-item>
-        <el-form-item label="朝代">
-          <el-input v-model="form.dynasty" placeholder="如：唐、宋" />
-        </el-form-item>
-      </el-form>
-      <template #footer>
-        <el-button @click="dialogVisible = false">取消</el-button>
-        <el-button type="primary" @click="handleSave" :loading="saving">保存</el-button>
-      </template>
-    </el-dialog>
+    <!-- Table -->
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th class="col-id">ID</th>
+            <th>姓名</th>
+            <th>朝代</th>
+            <th>创建时间</th>
+            <th style="width: 140px;">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="loading && poets.length === 0">
+            <td colspan="5">
+              <div style="padding: 32px; text-align: center; color: var(--paper-dim);">加载中…</div>
+            </td>
+          </tr>
+          <tr v-else-if="poets.length === 0">
+            <td colspan="5">
+              <div style="padding: 32px; text-align: center; color: var(--paper-dim);">暂无数据</div>
+            </td>
+          </tr>
+          <tr v-for="poet in poets" :key="poet.id">
+            <td class="col-id">{{ poet.id }}</td>
+            <td>{{ poet.name }}</td>
+            <td>{{ poet.dynasty }}</td>
+            <td>{{ poet.created_at }}</td>
+            <td>
+              <div style="display: flex; gap: 6px;">
+                <button class="btn btn-sm" @click="openEdit(poet)">编辑</button>
+                <button class="btn btn-sm btn-danger" @click="handleDelete(poet.id)">删除</button>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Pagination -->
+    <div class="pagination" v-if="total > 20">
+      <button class="btn btn-sm" :disabled="page <= 1" @click="goPage(page - 1)">上一页</button>
+      <button
+        v-for="p in pages" :key="p"
+        class="btn btn-sm"
+        :class="{ active: p === page }"
+        @click="goPage(p)"
+      >{{ p }}</button>
+      <button class="btn btn-sm" :disabled="page >= totalPages" @click="goPage(page + 1)">下一页</button>
+    </div>
+
+    <!-- Dialog -->
+    <div v-if="dialogVisible" class="dialog-overlay" @click.self="dialogVisible = false">
+      <div class="dialog" style="max-width: 420px;">
+        <div class="dialog-header">
+          <span class="dialog-title">{{ isEdit ? '编辑诗人' : '添加诗人' }}</span>
+          <button class="btn btn-icon btn-ghost" @click="dialogVisible = false">✕</button>
+        </div>
+        <div class="dialog-body">
+          <div class="form-group">
+            <label class="form-label">姓名</label>
+            <input v-model="form.name" class="input" placeholder="诗人姓名" />
+          </div>
+          <div class="form-group">
+            <label class="form-label">朝代</label>
+            <input v-model="form.dynasty" class="input" placeholder="如：唐、宋" />
+          </div>
+        </div>
+        <div class="dialog-footer">
+          <button class="btn" @click="dialogVisible = false">取消</button>
+          <button class="btn btn-primary" @click="handleSave" :disabled="saving">
+            {{ saving ? '保存中…' : '保存' }}
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref, reactive, computed, onMounted } from 'vue'
 import api from '../api'
+import { toast } from '../utils/toast'
+import { confirmDialog } from '../utils/confirm'
 
 interface Poet {
   id: number
@@ -86,6 +133,24 @@ const editId = ref(0)
 
 const filters = reactive({ keyword: '', dynasty: '' })
 const form = reactive({ name: '', dynasty: '' })
+
+const totalPages = computed(() => Math.ceil(total.value / 20))
+const pages = computed(() => {
+  const t = totalPages.value
+  if (t <= 7) {
+    const p: number[] = []
+    for (let i = 1; i <= t; i++) p.push(i)
+    return p
+  }
+  const p: number[] = [1]
+  const start = Math.max(2, page.value - 2)
+  const end = Math.min(t - 1, page.value + 2)
+  if (start > 2) p.push(-1)
+  for (let i = start; i <= end; i++) p.push(i)
+  if (end < t - 1) p.push(-1)
+  p.push(t)
+  return p
+})
 
 async function fetchData() {
   loading.value = true
@@ -108,6 +173,12 @@ function search() {
   fetchData()
 }
 
+function goPage(p: number) {
+  if (p < 1 || p > totalPages.value) return
+  page.value = p
+  fetchData()
+}
+
 function openCreate() {
   isEdit.value = false
   editId.value = 0
@@ -126,17 +197,17 @@ function openEdit(row: Poet) {
 
 async function handleSave() {
   if (!form.name || !form.dynasty) {
-    ElMessage.warning('姓名和朝代不能为空')
+    toast.warning('姓名和朝代不能为空')
     return
   }
   saving.value = true
   try {
     if (isEdit.value) {
       await api.put(`/poets/${editId.value}`, form)
-      ElMessage.success('更新成功')
+      toast.success('更新成功')
     } else {
       await api.post('/poets', form)
-      ElMessage.success('创建成功')
+      toast.success('创建成功')
     }
     dialogVisible.value = false
     fetchData()
@@ -146,12 +217,11 @@ async function handleSave() {
 }
 
 async function handleDelete(id: number) {
-  try {
-    await ElMessageBox.confirm('确定删除该诗人？', '确认', { type: 'warning' })
-    await api.delete(`/poets/${id}`)
-    ElMessage.success('删除成功')
-    fetchData()
-  } catch { /* cancelled */ }
+  const ok = await confirmDialog('确定删除该诗人？')
+  if (!ok) return
+  await api.delete(`/poets/${id}`)
+  toast.success('删除成功')
+  fetchData()
 }
 
 onMounted(() => {
@@ -159,3 +229,16 @@ onMounted(() => {
   fetchDynasties()
 })
 </script>
+
+<style scoped>
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.page-header h2 {
+  font-size: var(--text-xl);
+}
+</style>

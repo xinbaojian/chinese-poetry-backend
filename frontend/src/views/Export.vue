@@ -1,32 +1,46 @@
 <template>
   <div>
-    <h2 style="margin-bottom: 20px;">数据导出</h2>
+    <div class="page-header">
+      <h2>数据导出</h2>
+    </div>
 
-    <el-card>
-      <el-form :inline="true">
-        <el-form-item label="格式">
-          <el-radio-group v-model="format">
-            <el-radio value="csv">CSV</el-radio>
-            <el-radio value="json">JSON</el-radio>
-          </el-radio-group>
-        </el-form-item>
-        <el-form-item label="用户">
-          <el-select v-model="userId" placeholder="全部用户" clearable style="width: 200px;">
-            <el-option v-for="u in users" :key="u.id" :label="u.username" :value="u.id" />
-          </el-select>
-        </el-form-item>
-        <el-form-item>
-          <el-button type="primary" @click="handleDownload">下载</el-button>
-        </el-form-item>
-      </el-form>
-    </el-card>
+    <div class="card">
+      <div class="card-title" style="font-size: var(--text-lg); margin-bottom: 20px;">导出学习记录</div>
+      <div class="filters-bar">
+        <div class="filter-item">
+          <span class="filter-label">导出格式</span>
+          <div style="display: flex; gap: 8px;">
+            <button
+              class="btn btn-sm"
+              :class="{ 'btn-primary': format === 'csv' }"
+              @click="format = 'csv'"
+            >CSV</button>
+            <button
+              class="btn btn-sm"
+              :class="{ 'btn-primary': format === 'json' }"
+              @click="format = 'json'"
+            >JSON</button>
+          </div>
+        </div>
+        <div class="filter-item">
+          <span class="filter-label">用户</span>
+          <select v-model="userId" class="input select" style="width: 200px;">
+            <option value="">全部用户</option>
+            <option v-for="u in users" :key="u.id" :value="u.id">{{ u.username }}</option>
+          </select>
+        </div>
+        <div class="filter-item" style="align-self: flex-end;">
+          <button class="btn btn-primary" @click="handleDownload">下载</button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { ElMessage } from 'element-plus'
 import api from '../api'
+import { toast } from '../utils/toast'
 
 interface UserItem {
   id: number
@@ -38,14 +52,15 @@ const userId = ref<number | ''>('')
 const users = ref<UserItem[]>([])
 
 onMounted(async () => {
-  const res = await api.get('/export/users')
-  users.value = res.data.users
+  try {
+    const res = await api.get('/export/users')
+    users.value = res.data.users
+  } catch { /* handled */ }
 })
 
 async function handleDownload() {
   const params: any = { format: format.value }
   if (userId.value) params.user_id = userId.value
-
   try {
     const res = await api.get('/export/download', {
       params,
@@ -57,9 +72,22 @@ async function handleDownload() {
     a.download = `learning_data.${format.value}`
     a.click()
     window.URL.revokeObjectURL(url)
-    ElMessage.success('下载开始')
+    toast.success('下载开始')
   } catch {
     // handled by interceptor
   }
 }
 </script>
+
+<style scoped>
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.page-header h2 {
+  font-size: var(--text-xl);
+}
+</style>

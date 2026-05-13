@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { ElMessage } from 'element-plus'
+import { toast } from '../utils/toast'
 
 const api = axios.create({
   baseURL: '/api/v1/admin',
@@ -20,7 +20,7 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     const msg = error.response?.data?.error || '请求失败'
-    ElMessage.error(msg)
+    toast.error(msg)
     if (error.response?.status === 401) {
       localStorage.removeItem('admin_token')
       window.location.href = '/login'

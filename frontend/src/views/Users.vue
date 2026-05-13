@@ -1,38 +1,70 @@
 <template>
   <div>
-    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px;">
-      <h2 style="margin: 0;">用户管理</h2>
+    <div class="page-header">
+      <h2>用户管理</h2>
     </div>
 
-    <el-table :data="users" v-loading="loading" stripe>
-      <el-table-column prop="id" label="ID" width="80" />
-      <el-table-column prop="username" label="用户名" />
-      <el-table-column prop="role" label="角色" width="100" />
-      <el-table-column prop="record_count" label="学习记录" width="100" />
-      <el-table-column prop="created_at" label="注册时间" width="180" />
-      <el-table-column label="操作" width="100" fixed="right">
-        <template #default="{ row }">
-          <el-button size="small" type="danger" @click="handleDelete(row.id)">删除</el-button>
-        </template>
-      </el-table-column>
-    </el-table>
+    <!-- Table -->
+    <div class="table-wrap">
+      <table class="table">
+        <thead>
+          <tr>
+            <th class="col-id">ID</th>
+            <th>用户名</th>
+            <th>角色</th>
+            <th>学习记录</th>
+            <th>注册时间</th>
+            <th style="width: 100px;">操作</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="loading && users.length === 0">
+            <td colspan="6">
+              <div style="padding: 32px; text-align: center; color: var(--paper-dim);">加载中…</div>
+            </td>
+          </tr>
+          <tr v-else-if="users.length === 0">
+            <td colspan="6">
+              <div style="padding: 32px; text-align: center; color: var(--paper-dim);">暂无数据</div>
+            </td>
+          </tr>
+          <tr v-for="user in users" :key="user.id">
+            <td class="col-id">{{ user.id }}</td>
+            <td>{{ user.username }}</td>
+            <td>
+              <span class="role-badge" :class="user.role === 'admin' ? 'role-admin' : 'role-user'">
+                {{ user.role === 'admin' ? '管理员' : '用户' }}
+              </span>
+            </td>
+            <td>{{ user.record_count }}</td>
+            <td>{{ user.created_at }}</td>
+            <td>
+              <button class="btn btn-sm btn-danger" @click="handleDelete(user.id)">删除</button>
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
-    <div style="display: flex; justify-content: center; margin-top: 16px;">
-      <el-pagination
-        v-model:current-page="page"
-        :page-size="20"
-        :total="total"
-        layout="prev, pager, next"
-        @current-change="fetchData"
-      />
+    <!-- Pagination -->
+    <div class="pagination" v-if="total > 20">
+      <button class="btn btn-sm" :disabled="page <= 1" @click="goPage(page - 1)">上一页</button>
+      <button
+        v-for="p in pages" :key="p"
+        class="btn btn-sm"
+        :class="{ active: p === page }"
+        @click="goPage(p)"
+      >{{ p }}</button>
+      <button class="btn btn-sm" :disabled="page >= totalPages" @click="goPage(page + 1)">下一页</button>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
-import { ElMessage, ElMessageBox } from 'element-plus'
+import { ref, computed, onMounted } from 'vue'
 import api from '../api'
+import { toast } from '../utils/toast'
+import { confirmDialog } from '../utils/confirm'
 
 interface User {
   id: number
@@ -47,6 +79,24 @@ const loading = ref(false)
 const total = ref(0)
 const page = ref(1)
 
+const totalPages = computed(() => Math.ceil(total.value / 20))
+const pages = computed(() => {
+  const t = totalPages.value
+  if (t <= 7) {
+    const p: number[] = []
+    for (let i = 1; i <= t; i++) p.push(i)
+    return p
+  }
+  const p: number[] = [1]
+  const start = Math.max(2, page.value - 2)
+  const end = Math.min(t - 1, page.value + 2)
+  if (start > 2) p.push(-1)
+  for (let i = start; i <= end; i++) p.push(i)
+  if (end < t - 1) p.push(-1)
+  p.push(t)
+  return p
+})
+
 async function fetchData() {
   loading.value = true
   try {
@@ -58,16 +108,54 @@ async function fetchData() {
   }
 }
 
+function goPage(p: number) {
+  if (p < 1 || p > totalPages.value) return
+  page.value = p
+  fetchData()
+}
+
 async function handleDelete(id: number) {
-  try {
-    await ElMessageBox.confirm('确定删除该用户以及相关学习记录？', '确认', { type: 'warning' })
-    await api.delete(`/users/${id}`)
-    ElMessage.success('删除成功')
-    fetchData()
-  } catch { /* cancelled */ }
+  const ok = await confirmDialog('确定删除该用户及相关学习记录？')
+  if (!ok) return
+  await api.delete(`/users/${id}`)
+  toast.success('删除成功')
+  fetchData()
 }
 
 onMounted(() => {
   fetchData()
 })
 </script>
+
+<style scoped>
+.page-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.page-header h2 {
+  font-size: var(--text-xl);
+}
+
+.role-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: var(--radius-sm);
+  font-family: 'Noto Serif SC', serif; font-weight: 600;
+  font-size: var(--text-xs);
+}
+
+.role-admin {
+  background: rgba(194, 54, 62, 0.15);
+  color: var(--vermillion);
+  border: 1px solid rgba(194, 54, 62, 0.3);
+}
+
+.role-user {
+  background: rgba(191, 160, 96, 0.1);
+  color: var(--gold);
+  border: 1px solid rgba(191, 160, 96, 0.2);
+}
+</style>

@@ -1,0 +1,225 @@
+/* ===== Design Tokens: Ink & Paper ===== */
+:root {
+  /* Background layers */
+  --ink-deepest: #050508;
+  --ink-deep: #0a0b0e;
+  --ink-base: #111217;
+  --ink-surface: #17181e;
+  --ink-raised: #1d1e26;
+  --ink-overlay: #24252e;
+  --ink-border: #2a2b36;
+
+  /* Foreground */
+  --paper: #e8e0d0;
+  --paper-bright: #f2ece0;
+  --paper-dim: #908878;
+  --paper-faint: #5e5848;
+
+  /* Vermilion — seal red accents */
+  --vermillion: #c2363e;
+  --vermillion-deep: #8b1a22;
+  --vermillion-glow: rgba(194, 54, 62, 0.25);
+
+  /* Gold — scholarly accents */
+  --gold: #bfa060;
+  --gold-light: #d4bc7e;
+  --gold-glow: rgba(191, 160, 96, 0.2);
+
+  /* Jade — success, serene green */
+  --jade: #5b8c5a;
+  --jade-dim: #3d5e3c;
+
+  /* Sizing & Spacing */
+  --radius-sm: 2px;
+  --radius-md: 4px;
+  --radius-lg: 8px;
+
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.5), 0 0 0 1px var(--ink-border);
+  --shadow-dialog: 0 8px 40px rgba(0, 0, 0, 0.6), 0 0 0 1px var(--ink-border);
+  --shadow-glow: 0 0 24px var(--vermillion-glow);
+
+  /* Typography scale */
+  --text-xs: 0.7rem;
+  --text-sm: 0.8rem;
+  --text-base: 0.9rem;
+  --text-lg: 1.1rem;
+  --text-xl: 1.4rem;
+  --text-2xl: 1.8rem;
+  --text-3xl: 2.4rem;
+
+  /* Transitions */
+  --ease-out-expo: cubic-bezier(0.19, 1, 0.22, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --duration-fast: 150ms;
+  --duration-base: 250ms;
+  --duration-slow: 400ms;
+}
+
+/* ===== Paper Grain Overlay ===== */
+body::before {
+  content: '';
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  opacity: 0.03;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  background-repeat: repeat;
+  background-size: 256px 256px;
+}
+
+/* ===== Scrollbar ===== */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: var(--ink-deep);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--ink-overlay);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--ink-border);
+}
+
+/* ===== Global Reset ===== */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: 'Noto Serif SC', 'Source Han Serif SC', 'STSong', 'SimSun', serif;
+  background: var(--ink-deepest);
+  color: var(--paper);
+  line-height: 1.7;
+  min-height: 100vh;
+}
+
+h1, h2, h3, h4 {
+  font-family: 'Noto Serif SC', 'STKaiti', 'KaiTi', serif;
+  font-weight: 600;
+  font-weight: 400;
+  color: var(--paper-bright);
+  line-height: 1.3;
+}
+
+a {
+  color: var(--gold);
+  text-decoration: none;
+}
+
+/* ===== Selection ===== */
+::selection {
+  background: var(--vermillion-deep);
+  color: var(--paper-bright);
+}
+
+/* ===== Focus Ring ===== */
+:focus-visible {
+  outline: 1px solid var(--gold);
+  outline-offset: 2px;
+}
+
+/* ===== Animations ===== */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideRight {
+  from { opacity: 0; transform: translateX(-16px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+@keyframes inkBleed {
+  0% { transform: scale(0.95); opacity: 0; filter: blur(4px); }
+  100% { transform: scale(1); opacity: 1; filter: blur(0); }
+}
+
+@keyframes sealStamp {
+  0% { transform: scale(0.3) rotate(-8deg); opacity: 0; }
+  60% { transform: scale(1.1) rotate(1deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0deg); opacity: 1; }
+}
+
+@keyframes brushStroke {
+  from { width: 0; }
+  to { width: 100%; }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+@keyframes pulseGlow {
+  0%, 100% { box-shadow: 0 0 8px var(--vermillion-glow); }
+  50% { box-shadow: 0 0 20px var(--vermillion-glow), 0 0 40px rgba(194, 54, 62, 0.1); }
+}
+
+/* ===== Page Transitions ===== */
+.page-enter-active {
+  animation: inkBleed 0.35s var(--ease-out-expo);
+}
+.page-leave-active {
+  animation: fadeIn 0.2s reverse;
+}
+
+/* ===== Staggered Children ===== */
+.stagger > * {
+  opacity: 0;
+  animation: slideUp 0.4s var(--ease-out-expo) forwards;
+}
+.stagger > *:nth-child(1) { animation-delay: 0.05s; }
+.stagger > *:nth-child(2) { animation-delay: 0.1s; }
+.stagger > *:nth-child(3) { animation-delay: 0.15s; }
+.stagger > *:nth-child(4) { animation-delay: 0.2s; }
+.stagger > *:nth-child(5) { animation-delay: 0.25s; }
+.stagger > *:nth-child(6) { animation-delay: 0.3s; }
+.stagger > *:nth-child(7) { animation-delay: 0.35s; }
+.stagger > *:nth-child(8) { animation-delay: 0.4s; }
+
+/* ===== Utility: Ink divider ===== */
+.ink-divider {
+  height: 1px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    var(--ink-border) 20%,
+    var(--ink-border) 80%,
+    transparent
+  );
+  margin: 16px 0;
+}
+
+/* ===== Utility: Vermilion dot ===== */
+.vermillion-dot {
+  display: inline-block;
+  width: 6px;
+  height: 6px;
+  background: var(--vermillion);
+  border-radius: 50%;
+  box-shadow: 0 0 6px var(--vermillion-glow);
+}
