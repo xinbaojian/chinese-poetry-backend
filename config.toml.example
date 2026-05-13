@@ -1,0 +1,13 @@
+[server]
+host = "127.0.0.1"
+port = 3000
+
+[database]
+url = "mysql://user:password@host:port/database_name"
+
+[auth]
+jwt_secret = "change-this-to-a-random-secret"
+jwt_exp_hours = 72
+admin_username = "admin"
+admin_password = "change-this-password"
+session_secret = "change-this-to-a-random-secret"

@@ -1,0 +1,4 @@
+CREATE TABLE IF NOT EXISTS settings (
+    `key` VARCHAR(128) NOT NULL PRIMARY KEY,
+    `value` VARCHAR(512) NOT NULL
+);

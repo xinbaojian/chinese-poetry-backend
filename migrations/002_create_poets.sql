@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS poets (
+    id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+    name VARCHAR(64) NOT NULL,
+    dynasty VARCHAR(32) NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE KEY uk_name_dynasty (name, dynasty)
+);
