@@ -1,4 +1,4 @@
-IMAGE_NAME ?= chinese-poetry-backend
+IMAGE_NAME ?= registry.cn-hangzhou.aliyuncs.com/xinbaojian/chinese-poetry
 IMAGE_TAG ?= latest
 PLATFORM ?= linux/amd64
 
