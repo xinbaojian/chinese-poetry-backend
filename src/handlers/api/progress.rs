@@ -1,5 +1,5 @@
 use axum::{
-    extract::{Extension, State},
+    extract::{Extension, Path, State},
     Json,
 };
 use serde::{Deserialize, Serialize};
@@ -188,6 +188,30 @@ async fn update_learning_record(
     }
 
     Ok(())
+}
+
+pub async fn delete_progress(
+    Extension(user_info): Extension<UserInfo>,
+    State(state): State<AppState>,
+    Path(poem_id): Path<u64>,
+) -> AppResult<Json<serde_json::Value>> {
+    let result = sqlx::query(
+        "DELETE FROM learning_records WHERE user_id = ? AND poem_id = ?"
+    )
+    .bind(user_info.id)
+    .bind(poem_id)
+    .execute(&state.db)
+    .await?;
+
+    if result.rows_affected() == 0 {
+        Ok(Json(serde_json::json!({
+            "message": "记录不存在，无需删除"
+        })))
+    } else {
+        Ok(Json(serde_json::json!({
+            "message": "删除成功"
+        })))
+    }
 }
 
 pub async fn get_due_reviews(
