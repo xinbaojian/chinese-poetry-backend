@@ -154,9 +154,10 @@ const progressUsername = ref('')
 const progressRecords = ref<ProgressRecord[]>([])
 
 const masteryMap: Record<string, string> = {
-  proficient: '精通',
-  fair: '一般',
-  weak: '薄弱',
+  mastered: '已掌握',
+  reviewing: '复习中',
+  learning: '学习中',
+  new: '未学习',
 }
 
 function masteryLabel(level: string): string {
@@ -301,22 +302,28 @@ onMounted(() => {
   font-size: var(--text-xs);
 }
 
-.mastery-proficient {
+.mastery-mastered {
   background: rgba(76, 175, 80, 0.15);
   color: #4caf50;
   border: 1px solid rgba(76, 175, 80, 0.3);
 }
 
-.mastery-fair {
+.mastery-reviewing {
   background: rgba(255, 152, 0, 0.15);
   color: #ff9800;
   border: 1px solid rgba(255, 152, 0, 0.3);
 }
 
-.mastery-weak {
-  background: rgba(194, 54, 62, 0.15);
-  color: var(--vermillion);
-  border: 1px solid rgba(194, 54, 62, 0.3);
+.mastery-learning {
+  background: rgba(33, 150, 243, 0.15);
+  color: #2196f3;
+  border: 1px solid rgba(33, 150, 243, 0.3);
+}
+
+.mastery-new {
+  background: rgba(158, 158, 158, 0.15);
+  color: #9e9e9e;
+  border: 1px solid rgba(158, 158, 158, 0.3);
 }
 
 .table-compact {
