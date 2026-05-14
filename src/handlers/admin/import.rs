@@ -21,6 +21,9 @@ struct PoemEntry {
     #[serde(alias = "paragraphs")]
     paragraphes: Option<Vec<String>>,
     id: Option<serde_json::Value>,
+    category: Option<String>,
+    grade: Option<u8>,
+    translation: Option<String>,
     #[serde(default)]
     strain: Option<String>,
     #[serde(default)]
@@ -75,6 +78,18 @@ pub async fn import_poems(
         }
     };
 
+    // Pre-load all poets into memory to avoid repeated queries
+    let all_poets: Vec<(u64, String, String)> = sqlx::query_as(
+        "SELECT id, name, dynasty FROM poets"
+    )
+    .fetch_all(pool)
+    .await?;
+
+    let mut poet_cache: std::collections::HashMap<(String, String), u64> = all_poets
+        .into_iter()
+        .map(|(id, name, dynasty)| ((name, dynasty), id))
+        .collect();
+
     let mut imported: u32 = 0;
     let mut skipped: u32 = 0;
     let mut failed: u32 = 0;
@@ -114,12 +129,21 @@ pub async fn import_poems(
             .unwrap_or(&default_dynasty)
             .to_string();
 
-        let poet_id = match find_or_create_poet(pool, &author_name, &dynasty).await {
-            Ok(id) => id,
-            Err(e) => {
-                failed += 1;
-                errors.push(format!("「{title}」: 创建诗人失败 - {e}"));
-                continue;
+        // Resolve poet from cache or create
+        let poet_id = match poet_cache.get(&(author_name.clone(), dynasty.clone())) {
+            Some(&id) => id,
+            None => {
+                match find_or_create_poet(pool, &author_name, &dynasty).await {
+                    Ok(id) => {
+                        poet_cache.insert((author_name.clone(), dynasty.clone()), id);
+                        id
+                    }
+                    Err(e) => {
+                        failed += 1;
+                        errors.push(format!("「{title}」: 创建诗人失败 - {e}"));
+                        continue;
+                    }
+                }
             }
         };
 
@@ -131,6 +155,17 @@ pub async fn import_poems(
             other => other.to_string(),
         });
 
+        // Resolve fields — category/grade are NOT NULL in DB
+        let category: String = entry.category
+            .as_deref()
+            .map(|c| c.trim())
+            .filter(|c| !c.is_empty())
+            .unwrap_or("")
+            .to_string();
+        let grade: u8 = entry.grade.unwrap_or(0);
+        let translation = entry.translation.as_deref().map(|t| t.trim()).filter(|t| !t.is_empty());
+
+        // Check duplicate
         let existing: Option<(u64,)> = if let Some(ref sid) = source_id {
             sqlx::query_as("SELECT id FROM poems WHERE source_id = ?")
                 .bind(sid)
@@ -150,18 +185,35 @@ pub async fn import_poems(
             .map_err(|e| AppError::Database(e))?
         };
 
-        if existing.is_some() {
+        if let Some((existing_id,)) = existing {
+            // Backfill category/grade/translation for previously imported records
+            if !category.is_empty() || grade > 0 || translation.is_some() {
+                let _ = sqlx::query(
+                    "UPDATE poems SET category = ?, grade = ?, translation = COALESCE(?, translation) WHERE id = ? \
+                     AND (category = '' OR category IS NULL OR grade = 0 OR grade IS NULL)"
+                )
+                .bind(&category)
+                .bind(grade)
+                .bind(translation)
+                .bind(existing_id)
+                .execute(pool)
+                .await;
+            }
             skipped += 1;
             continue;
         }
 
         let insert_result = sqlx::query(
-            "INSERT INTO poems (title, poet_id, dynasty, content, source_id) VALUES (?, ?, ?, ?, ?)",
+            "INSERT INTO poems (title, poet_id, dynasty, category, grade, content, translation, source_id) \
+             VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
         )
         .bind(&title)
         .bind(poet_id)
         .bind(&dynasty)
+        .bind(&category)
+        .bind(grade)
         .bind(&content_json)
+        .bind(translation)
         .bind(&source_id)
         .execute(pool)
         .await;

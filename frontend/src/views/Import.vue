@@ -90,7 +90,7 @@ async function handleImport() {
   }
   importing.value = true
   try {
-    const res = await api.post('/import', form)
+    const res = await api.post('/import', form, { timeout: 300000 })
     results.value = res.data
     toast.success('导入完成')
   } finally {

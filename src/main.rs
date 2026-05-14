@@ -20,7 +20,12 @@ async fn main() -> anyhow::Result<()> {
         .init();
 
     let config = config::load_config(Path::new("config.toml"))?;
-    let pool = sqlx::MySqlPool::connect(&config.database.url).await?;
+    let pool = sqlx::mysql::MySqlPoolOptions::new()
+        .max_connections(10)
+        .acquire_timeout(std::time::Duration::from_secs(10))
+        .idle_timeout(std::time::Duration::from_secs(600))
+        .connect(&config.database.url)
+        .await?;
 
     // Run migrations manually
     run_migrations(&pool).await?;

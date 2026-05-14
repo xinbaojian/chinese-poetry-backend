@@ -1,20 +1,54 @@
 use axum::{
     body::Body,
-    http::{Request, StatusCode},
+    extract::Request,
+    http::{header, StatusCode},
     middleware,
-    response::{IntoResponse, Response},
+    response::Response,
     routing::{delete, get, post, put},
     Router,
 };
+use rust_embed::Embed;
 use tower_http::cors::{Any, CorsLayer};
-use tower_http::services::ServeDir;
 use tower_http::trace::TraceLayer;
 
 use crate::handlers::admin;
 use crate::handlers::api;
 use crate::state::AppState;
 
-const DIST_DIR: &str = "frontend/dist";
+#[derive(Embed, Clone)]
+#[folder = "frontend/dist/"]
+struct Assets;
+
+/// 从 rust-embed 提供静态文件，未命中则回退 index.html（SPA 路由）
+async fn serve_assets(req: Request) -> Response {
+    let path = req.uri().path().trim_start_matches('/');
+
+    // 尝试匹配精确路径
+    if let Some(file) = Assets::get(path) {
+        let mime = mime_guess::from_path(path).first_or_octet_stream();
+        return Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, mime.as_ref())
+            .body(Body::from(file.data.into_owned()))
+            .unwrap();
+    }
+
+    // SPA fallback: 返回 index.html
+    match Assets::get("index.html") {
+        Some(file) => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/html; charset=utf-8")
+            .body(Body::from(file.data.into_owned()))
+            .unwrap(),
+        None => Response::builder()
+            .status(StatusCode::OK)
+            .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
+            .body(Body::from(
+                "OK — backend running.\nUse `pnpm dev` in frontend/ for development, or `pnpm build` for production.",
+            ))
+            .unwrap(),
+    }
+}
 
 pub fn create_app(state: AppState) -> Router {
     // Admin API public routes (login only)
@@ -51,41 +85,12 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/v1/progress/due", get(api::progress::get_due_reviews))
         .layer(middleware::from_fn_with_state(state.clone(), crate::auth::api_auth_middleware));
 
-    // SPA fallback: serves index.html for any non-API route
-    async fn spa_index(_req: Request<Body>) -> Response {
-        match tokio::fs::read_to_string(format!("{DIST_DIR}/index.html")).await {
-            Ok(html) => Response::builder()
-                .status(StatusCode::OK)
-                .header("content-type", "text/html; charset=utf-8")
-                .body(Body::from(html))
-                .unwrap(),
-            Err(_) => Response::builder()
-                .status(StatusCode::OK)
-                .header("content-type", "text/plain; charset=utf-8")
-                .body(Body::from(
-                    "OK — backend running.\nUse `pnpm dev` in frontend/ for development, or `pnpm build` for production.",
-                ))
-                .unwrap(),
-        }
-    }
-
     Router::new()
         .merge(admin_public)
         .merge(admin_protected)
         .merge(api_public)
         .merge(api_protected)
-        .nest_service("/assets", ServeDir::new(format!("{DIST_DIR}/assets")))
-        .route("/vite.svg", get(|| async {
-            match tokio::fs::read(format!("{DIST_DIR}/vite.svg")).await {
-                Ok(data) => Response::builder()
-                    .status(StatusCode::OK)
-                    .header("content-type", "image/svg+xml")
-                    .body(Body::from(data))
-                    .unwrap(),
-                Err(_) => StatusCode::NOT_FOUND.into_response(),
-            }
-        }))
-        .fallback(spa_index)
+        .fallback(serve_assets)
         .with_state(state)
         .layer(
             CorsLayer::new()
