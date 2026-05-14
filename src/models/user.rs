@@ -55,3 +55,9 @@ pub struct JwtClaims {
     pub exp: usize,
     pub iat: usize,
 }
+
+#[derive(Debug, Deserialize)]
+pub struct ChangePasswordRequest {
+    pub old_password: String,
+    pub new_password: String,
+}

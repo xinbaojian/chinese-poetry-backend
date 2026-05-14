@@ -86,6 +86,7 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/v1/progress", get(api::progress::get_progress).post(api::progress::sync_progress))
         .route("/api/v1/progress/due", get(api::progress::get_due_reviews))
         .route("/api/v1/progress/:poem_id", delete(api::progress::delete_progress))
+        .route("/api/v1/auth/password", put(api::auth::change_password))
         .layer(middleware::from_fn_with_state(state.clone(), crate::auth::api_auth_middleware));
 
     Router::new()

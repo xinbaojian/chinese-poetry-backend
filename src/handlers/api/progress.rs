@@ -2,10 +2,11 @@ use axum::{
     extract::{Extension, Path, State},
     Json,
 };
+use chrono::NaiveDateTime;
 use serde::{Deserialize, Serialize};
 use sqlx::FromRow;
 
-use crate::errors::AppResult;
+use crate::errors::{AppError, AppResult};
 use crate::models::user::UserInfo;
 use crate::state::AppState;
 
@@ -122,9 +123,10 @@ async fn insert_learning_record(
     user_id: u64,
     record: &SyncRecord,
 ) -> AppResult<()> {
-    let next_review_str = record.next_review_date.as_deref().unwrap_or("NULL");
+    let updated_at = parse_datetime(&record.updated_at)?;
 
-    if record.next_review_date.is_some() {
+    if let Some(ref next_review) = record.next_review_date {
+        let next_review_dt = parse_datetime(next_review)?;
         sqlx::query(
             "INSERT INTO learning_records (user_id, poem_id, mastery_level, review_count, next_review_date, updated_at) \
              VALUES (?, ?, ?, ?, ?, ?)"
@@ -133,8 +135,8 @@ async fn insert_learning_record(
         .bind(record.poem_id)
         .bind(&record.mastery_level)
         .bind(record.review_count)
-        .bind(next_review_str)
-        .bind(&record.updated_at)
+        .bind(next_review_dt)
+        .bind(updated_at)
         .execute(pool)
         .await?;
     } else {
@@ -146,7 +148,7 @@ async fn insert_learning_record(
         .bind(record.poem_id)
         .bind(&record.mastery_level)
         .bind(record.review_count)
-        .bind(&record.updated_at)
+        .bind(updated_at)
         .execute(pool)
         .await?;
     }
@@ -159,16 +161,18 @@ async fn update_learning_record(
     user_id: u64,
     record: &SyncRecord,
 ) -> AppResult<()> {
-    if record.next_review_date.is_some() {
-        let next_review_str = record.next_review_date.as_deref().unwrap_or("NULL");
+    let updated_at = parse_datetime(&record.updated_at)?;
+
+    if let Some(ref next_review) = record.next_review_date {
+        let next_review_dt = parse_datetime(next_review)?;
         sqlx::query(
             "UPDATE learning_records SET mastery_level = ?, review_count = ?, next_review_date = ?, updated_at = ? \
              WHERE user_id = ? AND poem_id = ?"
         )
         .bind(&record.mastery_level)
         .bind(record.review_count)
-        .bind(next_review_str)
-        .bind(&record.updated_at)
+        .bind(next_review_dt)
+        .bind(updated_at)
         .bind(user_id)
         .bind(record.poem_id)
         .execute(pool)
@@ -180,7 +184,7 @@ async fn update_learning_record(
         )
         .bind(&record.mastery_level)
         .bind(record.review_count)
-        .bind(&record.updated_at)
+        .bind(updated_at)
         .bind(user_id)
         .bind(record.poem_id)
         .execute(pool)
@@ -212,6 +216,19 @@ pub async fn delete_progress(
             "message": "删除成功"
         })))
     }
+}
+
+fn parse_datetime(s: &str) -> AppResult<NaiveDateTime> {
+    // 去掉时区后缀（Z / +08:00 / +00:00），MySQL DATETIME 不含时区
+    let stripped = s
+        .trim_end_matches('Z')
+        .split_once('+')
+        .map(|(prefix, _)| prefix)
+        .unwrap_or(s);
+    NaiveDateTime::parse_from_str(stripped, "%Y-%m-%dT%H:%M:%S%.f")
+        .or_else(|_| NaiveDateTime::parse_from_str(stripped, "%Y-%m-%dT%H:%M:%S"))
+        .or_else(|_| NaiveDateTime::parse_from_str(stripped, "%Y-%m-%d %H:%M:%S"))
+        .map_err(|_| AppError::Validation(format!("无效的日期格式: {}", s)))
 }
 
 pub async fn get_due_reviews(

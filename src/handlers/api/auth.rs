@@ -1,11 +1,11 @@
 use axum::{
-    extract::State,
+    extract::{Extension, State},
     Json,
 };
 
 use crate::auth;
 use crate::errors::{AppError, AppResult};
-use crate::models::user::{LoginRequest, LoginResponse, RegisterRequest, User, UserInfo};
+use crate::models::user::{ChangePasswordRequest, LoginRequest, LoginResponse, RegisterRequest, User, UserInfo};
 use crate::state::AppState;
 
 pub async fn register(
@@ -77,4 +77,34 @@ pub async fn login(
     )?;
 
     Ok(Json(LoginResponse { token, user: user_info }))
+}
+
+pub async fn change_password(
+    Extension(user_info): Extension<UserInfo>,
+    State(state): State<AppState>,
+    Json(req): Json<ChangePasswordRequest>,
+) -> AppResult<Json<serde_json::Value>> {
+    if req.new_password.len() < 6 {
+        return Err(AppError::Validation("新密码长度至少6个字符".to_string()));
+    }
+
+    let user: User = sqlx::query_as("SELECT * FROM users WHERE id = ?")
+        .bind(user_info.id)
+        .fetch_one(&state.db)
+        .await
+        .map_err(|_| AppError::Internal("用户不存在".to_string()))?;
+
+    let valid = auth::verify_password(&req.old_password, &user.password_hash)?;
+    if !valid {
+        return Err(AppError::InvalidCredentials);
+    }
+
+    let new_hash = auth::hash_password(&req.new_password)?;
+    sqlx::query("UPDATE users SET password_hash = ? WHERE id = ?")
+        .bind(&new_hash)
+        .bind(user_info.id)
+        .execute(&state.db)
+        .await?;
+
+    Ok(Json(serde_json::json!({ "message": "密码修改成功" })))
 }
