@@ -79,10 +79,19 @@
       </table>
     </div>
 
-    <div class="pagination" v-if="total > 20">
-      <button class="btn btn-sm" :disabled="page <= 1" @click="goPage(page - 1)">上一页</button>
-      <button v-for="p in pages" :key="p" class="btn btn-sm" :class="{ active: p === page }" @click="goPage(p)">{{ p }}</button>
-      <button class="btn btn-sm" :disabled="page >= totalPages" @click="goPage(page + 1)">下一页</button>
+    <div class="pagination" v-if="total > perPage">
+      <div class="pagination-left">
+        <select v-model.number="perPage" class="input select per-page-select" @change="changePerPage">
+          <option :value="10">10 条/页</option>
+          <option :value="20">20 条/页</option>
+          <option :value="50">50 条/页</option>
+        </select>
+      </div>
+      <div class="pagination-right">
+        <button class="btn btn-sm" :disabled="page <= 1" @click="goPage(page - 1)">上一页</button>
+        <button v-for="p in pages" :key="p" class="btn btn-sm" :class="{ active: p === page }" @click="goPage(p)">{{ p }}</button>
+        <button class="btn btn-sm" :disabled="page >= totalPages" @click="goPage(page + 1)">下一页</button>
+      </div>
     </div>
 
     <!-- Detail View -->
@@ -210,6 +219,7 @@ const loading = ref(false)
 const saving = ref(false)
 const total = ref(0)
 const page = ref(1)
+const perPage = ref(10)
 const dialogVisible = ref(false)
 const isEdit = ref(false)
 const editId = ref(0)
@@ -235,7 +245,7 @@ const form = reactive({
 
 const options = reactive({ dynasties: [] as string[], categories: [] as string[], grades: [] as number[] })
 
-const totalPages = computed(() => Math.ceil(total.value / 20))
+const totalPages = computed(() => Math.ceil(total.value / perPage.value))
 const pages = computed(() => {
   const p: number[] = []
   const t = totalPages.value
@@ -255,7 +265,7 @@ const pages = computed(() => {
 async function fetchData() {
   loading.value = true
   try {
-    const res = await api.get('/poems', { params: { ...filters, page: page.value } })
+    const res = await api.get('/poems', { params: { ...filters, page: page.value, per_page: perPage.value } })
     poems.value = res.data.poems
     total.value = res.data.total
   } finally {
@@ -278,6 +288,11 @@ function search() {
 function goPage(p: number) {
   if (p < 1 || p > totalPages.value) return
   page.value = p
+  fetchData()
+}
+
+function changePerPage() {
+  page.value = 1
   fetchData()
 }
 
@@ -538,5 +553,29 @@ onMounted(async () => {
   font-size: var(--text-xs);
   color: var(--paper-dim);
   border: 1px solid var(--ink-border);
+}
+
+.pagination {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.pagination-left {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.pagination-right {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.per-page-select {
+  width: auto;
+  padding: 4px 8px;
+  font-size: var(--text-xs);
 }
 </style>

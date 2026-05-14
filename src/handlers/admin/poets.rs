@@ -31,6 +31,7 @@ pub struct PoetQuery {
     pub keyword: Option<String>,
     pub dynasty: Option<String>,
     pub page: Option<u32>,
+    pub per_page: Option<u32>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -65,7 +66,7 @@ pub async fn list(
     Query(params): Query<PoetQuery>,
 ) -> Result<impl IntoResponse, AppError> {
     let page = params.page.unwrap_or(1).max(1);
-    let per_page: u32 = 20;
+    let per_page = params.per_page.unwrap_or(10).clamp(1, 100);
     let offset = (page - 1) * per_page;
 
     let keyword = params.keyword.unwrap_or_default();

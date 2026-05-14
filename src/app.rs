@@ -67,6 +67,8 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/v1/admin/poems/:id", get(admin::poems::get_poem).put(admin::poems::update).delete(admin::poems::delete))
         .route("/api/v1/admin/users", get(admin::users::list))
         .route("/api/v1/admin/users/:id", delete(admin::users::delete))
+        .route("/api/v1/admin/users/:id/reset-password", put(admin::users::reset_password))
+        .route("/api/v1/admin/users/:id/progress", get(admin::users::get_progress))
         .route("/api/v1/admin/import", post(admin::import::import_poems))
         .route("/api/v1/admin/export/users", get(admin::export::get_users))
         .route("/api/v1/admin/export/download", get(admin::export::download))
@@ -83,6 +85,7 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/v1/poems/:id", get(api::poems::get_poem))
         .route("/api/v1/progress", get(api::progress::get_progress).post(api::progress::sync_progress))
         .route("/api/v1/progress/due", get(api::progress::get_due_reviews))
+        .route("/api/v1/progress/:poem_id", delete(api::progress::delete_progress))
         .layer(middleware::from_fn_with_state(state.clone(), crate::auth::api_auth_middleware));
 
     Router::new()
