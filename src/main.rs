@@ -71,6 +71,7 @@ async fn run_migrations(pool: &sqlx::MySqlPool) -> anyhow::Result<()> {
         include_str!("../migrations/005_create_review_history.sql"),
         include_str!("../migrations/006_create_settings.sql"),
         include_str!("../migrations/007_update_mastery_level_enum.sql"),
+        include_str!("../migrations/007b_update_review_history_enum.sql"),
         include_str!("../migrations/008_create_refresh_tokens.sql"),
     ];
 

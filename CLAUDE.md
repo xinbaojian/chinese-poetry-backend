@@ -309,3 +309,84 @@ let serve_assets = ServeEmbed::<Assets>::with_parameters(
 - Release 模式编译时嵌入（Docker 镜像只需一个二进制文件）
 - 必须开启 `mime-guess` feature，否则 CSS/JS 返回 `application/octet-stream`
 - Docker 多阶段构建：先构建前端 → 再编译 Rust（此时 dist 已存在）→ 最终镜像只含二进制 + 配置
+
+### MySQL 不支持 `DELETE ... RETURNING`
+
+`RETURNING` 是 PostgreSQL 特有语法，MySQL 不支持。如需原子地"查到就删"，必须用事务 + `FOR UPDATE`：
+
+```rust
+// WRONG — MySQL 不支持 RETURNING，运行时报语法错误
+let row = sqlx::query_as::<_, (u64,)>(
+    "DELETE FROM tokens WHERE token = ? AND expires_at > NOW() RETURNING user_id"
+).fetch_optional(pool).await?;
+
+// CORRECT — 事务 + FOR UPDATE 行锁，保证原子性
+let mut tx = pool.begin().await?;
+let row = sqlx::query_as::<_, (u64,)>(
+    "SELECT user_id FROM tokens WHERE token = ? AND expires_at > NOW() FOR UPDATE"
+).bind(token).fetch_optional(&mut *tx).await?;
+let user_id = row.map(|(id,)| id).ok_or(AppError::InvalidToken)?;
+sqlx::query("DELETE FROM tokens WHERE token = ?")
+    .bind(token).execute(&mut *tx).await?;
+tx.commit().await?;
+```
+
+**Why**: `DELETE ... RETURNING` 在编译期不会报错（sqlx 是运行时执行），但运行时 MySQL 会抛出语法错误。这种 bug 只能在运行时被发现，难以通过编译捕获。
+
+### sqlx::query() 只能执行单条 SQL 语句
+
+`sqlx::query()` 不支持多语句执行。迁移文件中如果包含多条 SQL（用分号分隔），第二条及之后的语句会被忽略或报错：
+
+```sql
+-- WRONG — 第二条 ALTER TABLE 不会执行，报语法错误
+ALTER TABLE learning_records
+    MODIFY COLUMN mastery_level ENUM('new', 'learning', 'reviewing', 'mastered') NOT NULL DEFAULT 'new';
+
+ALTER TABLE review_history
+    MODIFY COLUMN mastery_level ENUM('new', 'learning', 'reviewing', 'mastered') NOT NULL;
+
+-- CORRECT — 每个文件只放一条语句，拆成多个迁移文件
+-- 007_update_learning_records_enum.sql
+ALTER TABLE learning_records
+    MODIFY COLUMN mastery_level ENUM('new', 'learning', 'reviewing', 'mastered') NOT NULL DEFAULT 'new'
+
+-- 007b_update_review_history_enum.sql
+ALTER TABLE review_history
+    MODIFY COLUMN mastery_level ENUM('new', 'learning', 'reviewing', 'mastered') NOT NULL
+```
+
+**Why**: `sqlx::query()` 将整个字符串作为单条语句发送给 MySQL。包含分号时，MySQL 只执行第一条，后面的内容被当作语法错误。这不会在编译时被发现，只在运行时首次执行迁移时暴露。
+
+### Argon2 操作必须在所有 handler 中统一使用 spawn_blocking
+
+不能只在一个 handler 中加了 `spawn_blocking` 就认为全部处理了。需要逐一检查所有调用 `hash_password` / `verify_password` 的位置：
+
+```rust
+// 容易遗漏的场景：register 中的 hash_password
+// login 加了 spawn_blocking，但 register 忘了
+
+// 检查清单：所有 handler 中的 Argon2 调用都必须包装
+// - admin/auth/login ✅ spawn_blocking
+// - api/auth/register — 需要检查！
+// - api/auth/login — 需要检查！
+// - api/auth/change_password — 需要检查！（verify + hash 两处）
+```
+
+**Why**: handler 数量增加后容易遗漏。修改认证相关代码时，应 grep 所有调用 `hash_password` 和 `verify_password` 的位置，逐一确认。
+
+### 认证端点的路由组归属需要仔细考虑
+
+logout 等只需 refresh_token（不需要 access_token）的端点，应放在公开路由组而非受保护路由组：
+
+```rust
+// WRONG — logout 在 protected 组，access_token 过期后无法调用
+let api_protected = Router::new()
+    .route("/api/v1/auth/logout", post(api::auth::logout))
+    .layer(middleware::from_fn_with_state(..., api_auth_middleware));
+
+// CORRECT — logout 在 public 组，只需请求体中的 refresh_token
+let api_public = Router::new()
+    .route("/api/v1/auth/logout", post(api::auth::logout));
+```
+
+**Why**: 用户 access_token 过期时，合理的预期是仍能登出。如果 logout 放在 protected 组，过期的 access_token 会被中间件拦截返回 401，用户只能等待 token 自然过期或清除本地存储，体验不佳。
