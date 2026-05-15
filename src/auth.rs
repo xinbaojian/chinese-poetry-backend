@@ -9,6 +9,7 @@ use jsonwebtoken::{decode, encode, DecodingKey, EncodingKey, Header, Validation}
 use argon2::password_hash::SaltString;
 use argon2::{Argon2, PasswordHash, PasswordHasher, PasswordVerifier};
 use password_hash::rand_core::OsRng;
+use uuid::Uuid;
 
 use crate::errors::AppError;
 use crate::models::user::{JwtClaims, UserInfo};
@@ -115,4 +116,84 @@ pub async fn api_auth_middleware(
 
     request.extensions_mut().insert(user_info);
     Ok(next.run(request).await)
+}
+
+pub fn generate_refresh_token() -> String {
+    Uuid::new_v4().to_string()
+}
+
+pub async fn save_refresh_token(
+    pool: &sqlx::MySqlPool,
+    user_id: u64,
+    token: &str,
+    exp_days: u64,
+) -> Result<(), AppError> {
+    let expires_at = Utc::now() + chrono::Duration::days(exp_days as i64);
+    sqlx::query(
+        "INSERT INTO refresh_tokens (user_id, token, expires_at) VALUES (?, ?, ?)"
+    )
+    .bind(user_id)
+    .bind(token)
+    .bind(expires_at.naive_utc())
+    .execute(pool)
+    .await?;
+    Ok(())
+}
+
+/// 原子操作：验证并消费 refresh_token（事务 + FOR UPDATE 行锁防并发）
+pub async fn consume_refresh_token(
+    pool: &sqlx::MySqlPool,
+    token: &str,
+) -> Result<u64, AppError> {
+    let mut tx = pool.begin().await?;
+
+    let row: Option<(u64,)> = sqlx::query_as(
+        "SELECT user_id FROM refresh_tokens WHERE token = ? AND expires_at > NOW() FOR UPDATE"
+    )
+    .bind(token)
+    .fetch_optional(&mut *tx)
+    .await?;
+
+    let user_id = row.map(|(id,)| id).ok_or(AppError::InvalidToken)?;
+
+    sqlx::query("DELETE FROM refresh_tokens WHERE token = ?")
+        .bind(token)
+        .execute(&mut *tx)
+        .await?;
+
+    tx.commit().await?;
+    Ok(user_id)
+}
+
+/// 吊销单个 refresh_token（用于 logout）
+pub async fn revoke_refresh_token(
+    pool: &sqlx::MySqlPool,
+    token: &str,
+) -> Result<(), AppError> {
+    sqlx::query("DELETE FROM refresh_tokens WHERE token = ?")
+        .bind(token)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn revoke_all_refresh_tokens(
+    pool: &sqlx::MySqlPool,
+    user_id: u64,
+) -> Result<(), AppError> {
+    sqlx::query("DELETE FROM refresh_tokens WHERE user_id = ?")
+        .bind(user_id)
+        .execute(pool)
+        .await?;
+    Ok(())
+}
+
+pub async fn cleanup_expired_refresh_tokens(pool: &sqlx::MySqlPool) -> Result<(), AppError> {
+    let result = sqlx::query("DELETE FROM refresh_tokens WHERE expires_at < NOW()")
+        .execute(pool)
+        .await?;
+    if result.rows_affected() > 0 {
+        tracing::info!("Cleaned up {} expired refresh tokens", result.rows_affected());
+    }
+    Ok(())
 }

@@ -27,6 +27,7 @@ pub struct LoginRequest {
 #[derive(Debug, Serialize)]
 pub struct LoginResponse {
     pub token: String,
+    pub refresh_token: String,
     pub user: UserInfo,
 }
 
@@ -60,4 +61,9 @@ pub struct JwtClaims {
 pub struct ChangePasswordRequest {
     pub old_password: String,
     pub new_password: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RefreshRequest {
+    pub refresh_token: String,
 }

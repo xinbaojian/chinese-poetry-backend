@@ -51,9 +51,10 @@ async fn serve_assets(req: Request) -> Response {
 }
 
 pub fn create_app(state: AppState) -> Router {
-    // Admin API public routes (login only)
+    // Admin API public routes (login + refresh)
     let admin_public = Router::new()
-        .route("/api/v1/admin/login", post(admin::auth::login));
+        .route("/api/v1/admin/login", post(admin::auth::login))
+        .route("/api/v1/admin/refresh", post(admin::auth::refresh));
 
     // Admin API protected routes (JWT + role=admin)
     let admin_protected = Router::new()
@@ -74,10 +75,12 @@ pub fn create_app(state: AppState) -> Router {
         .route("/api/v1/admin/export/download", get(admin::export::download))
         .layer(middleware::from_fn_with_state(state.clone(), crate::auth::admin_api_auth_middleware));
 
-    // App API public routes (register/login)
+    // App API public routes (register/login/refresh/logout)
     let api_public = Router::new()
         .route("/api/v1/auth/register", post(api::auth::register))
-        .route("/api/v1/auth/login", post(api::auth::login));
+        .route("/api/v1/auth/login", post(api::auth::login))
+        .route("/api/v1/auth/refresh", post(api::auth::refresh))
+        .route("/api/v1/auth/logout", post(api::auth::logout));
 
     // App API protected routes (JWT auth)
     let api_protected = Router::new()

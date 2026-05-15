@@ -27,6 +27,8 @@ pub struct AuthConfig {
     pub jwt_secret: String,
     #[serde(default = "default_jwt_exp_hours")]
     pub jwt_exp_hours: u64,
+    #[serde(default = "default_refresh_exp_days")]
+    pub refresh_exp_days: u64,
     pub admin_username: String,
     pub admin_password: String,
     pub session_secret: String,
@@ -35,7 +37,8 @@ pub struct AuthConfig {
 fn default_host() -> String { "127.0.0.1".to_string() }
 fn default_port() -> u16 { 3000 }
 fn default_jwt_secret() -> String { "change-this-in-production".to_string() }
-fn default_jwt_exp_hours() -> u64 { 72 }
+fn default_jwt_exp_hours() -> u64 { 2 }
+fn default_refresh_exp_days() -> u64 { 30 }
 
 pub fn load_config(path: &Path) -> anyhow::Result<Config> {
     let config_path = std::env::var("CONFIG_PATH")

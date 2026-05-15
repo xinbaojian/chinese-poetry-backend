@@ -42,6 +42,20 @@ async fn main() -> anyhow::Result<()> {
     let listener = tokio::net::TcpListener::bind(&addr).await?;
     tracing::info!("Listening on {}", addr);
 
+    // 启动后台清理任务
+    {
+        let cleanup_pool = state.db.clone();
+        tokio::spawn(async move {
+            let mut interval = tokio::time::interval(std::time::Duration::from_secs(86400));
+            loop {
+                interval.tick().await;
+                if let Err(e) = auth::cleanup_expired_refresh_tokens(&cleanup_pool).await {
+                    tracing::error!("Failed to cleanup expired refresh tokens: {}", e);
+                }
+            }
+        });
+    }
+
     let app = app::create_app(state);
     axum::serve(listener, app).await?;
 
@@ -56,6 +70,8 @@ async fn run_migrations(pool: &sqlx::MySqlPool) -> anyhow::Result<()> {
         include_str!("../migrations/004_create_learning_records.sql"),
         include_str!("../migrations/005_create_review_history.sql"),
         include_str!("../migrations/006_create_settings.sql"),
+        include_str!("../migrations/007_update_mastery_level_enum.sql"),
+        include_str!("../migrations/008_create_refresh_tokens.sql"),
     ];
 
     for sql in migrations {

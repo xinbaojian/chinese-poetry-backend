@@ -2,7 +2,7 @@
 
 > 基础地址：`http(s)://<host>:3000/api/v1`
 >
-> 所有接口统一返回 JSON。认证接口无需 Token，其余接口需在 Header 携带 `Authorization: Bearer <token>`。
+> 所有接口统一返回 JSON。认证接口无需 Token，其余接口需在 Header 携带 `Authorization: Bearer <access_token>`。
 
 ---
 
@@ -14,6 +14,7 @@
 4. [学习进度模块](#4-学习进度模块)
 5. [错误码参考](#5-错误码参考)
 6. [Swift 数据模型参考](#6-swift-数据模型参考)
+7. [令牌刷新流程](#7-令牌刷新流程)
 
 ---
 
@@ -23,7 +24,7 @@
 
 ```
 Content-Type: application/json
-Authorization: Bearer <jwt_token>   // 需要认证的接口
+Authorization: Bearer <access_token>   // 需要认证的接口
 ```
 
 ### 成功响应
@@ -40,11 +41,16 @@ Authorization: Bearer <jwt_token>   // 需要认证的接口
 }
 ```
 
-### JWT Token
+### 双令牌机制
 
-- 算法：HS256
-- 有效期：72 小时（可配置）
-- Payload：
+系统使用双令牌认证，登录/注册成功后返回两个令牌：
+
+| 令牌 | 类型 | 有效期 | 用途 |
+|------|------|--------|------|
+| `token`（access_token） | JWT (HS256) | 2 小时 | 放在 `Authorization` 头中访问受保护接口 |
+| `refresh_token` | 不透明随机字符串 | 30 天 | access_token 过期后用它换新令牌对 |
+
+**access_token** Payload：
 
 ```json
 {
@@ -52,11 +58,17 @@ Authorization: Bearer <jwt_token>   // 需要认证的接口
   "username": "用户名",
   "role": "user 或 admin",
   "iat": 1715664000,
-  "exp": 1715923200
+  "exp": 1715671200
 }
 ```
 
-- Token 过期后需重新调用登录接口获取新 Token
+**核心规则：**
+- access_token 过期后，用 refresh_token 调用刷新接口获取新的令牌对
+- 每次刷新后，旧 refresh_token 立即失效（令牌轮换）
+- 修改密码后，该用户所有 refresh_token 失效
+- refresh_token 过期或已吊销，需重新登录
+
+> **存储建议**：`token` 和 `refresh_token` 均存入 Keychain，不要存 UserDefaults。
 
 ---
 
@@ -89,6 +101,7 @@ POST /api/v1/auth/register
 ```json
 {
   "token": "eyJhbGciOiJIUzI1NiJ9...",
+  "refresh_token": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "user": {
     "id": 5,
     "username": "zhangsan",
@@ -125,6 +138,7 @@ POST /api/v1/auth/login
 ```json
 {
   "token": "eyJhbGciOiJIUzI1NiJ9...",
+  "refresh_token": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
   "user": {
     "id": 5,
     "username": "zhangsan",
@@ -136,7 +150,108 @@ POST /api/v1/auth/login
 错误场景：
 - `401` — 用户名或密码错误
 
-> **对接建议**：注册/登录成功后，将 `token` 存入 Keychain，`user` 信息存入 UserDefaults 或本地数据库。后续所有请求从 Keychain 读取 Token。
+---
+
+### 2.3 刷新令牌
+
+```
+POST /api/v1/auth/refresh
+```
+
+**无需认证**
+
+请求体：
+
+```json
+{
+  "refresh_token": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+成功响应 `200`：
+
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiJ9...(新 access_token)",
+  "refresh_token": "f9e8d7c6-b5a4-3210-fedc-ba0987654321",
+  "user": {
+    "id": 5,
+    "username": "zhangsan",
+    "role": "user"
+  }
+}
+```
+
+> **重要**：每次刷新成功后，旧 refresh_token 立即失效。必须用新返回的 `token` 和 `refresh_token` 替换本地存储。
+
+错误场景：
+- `401` — refresh_token 过期、已吊销或无效（需重新登录）
+
+---
+
+### 2.4 退出登录
+
+```
+POST /api/v1/auth/logout
+```
+
+**无需认证**（通过请求体中的 refresh_token 识别会话）
+
+请求体：
+
+```json
+{
+  "refresh_token": "a1b2c3d4-e5f6-7890-abcd-ef1234567890"
+}
+```
+
+成功响应 `200`：
+
+```json
+{
+  "message": "已退出登录"
+}
+```
+
+> 调用后应同时清除本地存储的 token 和 refresh_token。
+
+---
+
+### 2.5 修改密码
+
+```
+PUT /api/v1/auth/password
+```
+
+**需要认证**
+
+请求体：
+
+```json
+{
+  "old_password": "123456",
+  "new_password": "654321"
+}
+```
+
+| 字段 | 类型 | 必填 | 说明 |
+|------|------|------|------|
+| old_password | String | ✅ | 当前密码 |
+| new_password | String | ✅ | 新密码，至少 6 个字符 |
+
+成功响应 `200`：
+
+```json
+{
+  "message": "密码修改成功"
+}
+```
+
+> **注意**：修改密码后，该用户所有 refresh_token 被吊销。客户端应清除本地令牌并引导用户重新登录。
+
+错误场景：
+- `400` — 新密码长度不足
+- `401` — 旧密码错误
 
 ---
 
@@ -366,18 +481,42 @@ GET /api/v1/progress/due
 
 ---
 
+### 4.4 删除学习记录
+
+```
+DELETE /api/v1/progress/{poem_id}
+```
+
+**需要认证**
+
+路径参数：
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| poem_id | Int | 诗词 ID |
+
+成功响应 `200`：
+
+```json
+{
+  "message": "删除成功"
+}
+```
+
+---
+
 ## 5. 错误码参考
 
 | HTTP 状态码 | 含义 | 典型场景 |
 |------------|------|---------|
 | `200` | 成功 | — |
 | `400` | 参数错误 | 用户名长度不符、密码太短、必填字段为空 |
-| `401` | 未认证 / 认证失败 | Token 缺失、Token 过期、用户名密码错误 |
+| `401` | 未认证 / 认证失败 | Token 缺失、Token 过期、refresh_token 无效或过期 |
 | `404` | 资源不存在 | 诗词 ID 不存在 |
 | `409` | 冲突 | 用户名已注册 |
 | `500` | 服务器内部错误 | 数据库异常 |
 
-> **对接建议**：收到 `401` 时应清除本地 Token 并跳转到登录页。其他错误展示 `error` 字段的中文信息即可。
+> **对接建议**：收到 `401` 时，**先尝试用 refresh_token 刷新令牌**（见[第 7 节](#7-令牌刷新流程)），刷新失败再清除本地数据并跳转登录页。
 
 ---
 
@@ -399,8 +538,13 @@ struct RegisterRequest: Encodable {
 }
 
 struct AuthResponse: Decodable {
-    let token: String
+    let token: String              // access_token（JWT，2 小时有效）
+    let refresh_token: String      // refresh_token（30 天有效）
     let user: UserInfo
+}
+
+struct RefreshRequest: Encodable {
+    let refresh_token: String
 }
 
 struct UserInfo: Decodable {
@@ -485,12 +629,16 @@ class APIClient {
     static let shared = APIClient()
     private let baseURL = "http://<host>:3000/api/v1"
 
-    var token: String?  // 从 Keychain 读取
+    // 存入 Keychain
+    var token: String?
+    var refreshToken: String?
 
+    /// 发起请求，401 时自动尝试刷新令牌后重试一次
     func request<T: Decodable>(
         _ path: String,
         method: String = "GET",
-        body: Encodable? = nil
+        body: Encodable? = nil,
+        retry: Bool = true
     ) async throws -> T {
         var request = URLRequest(url: URL(string: "\(baseURL)\(path)")!)
         request.httpMethod = method
@@ -510,9 +658,17 @@ class APIClient {
             throw APIError.invalidResponse
         }
 
-        if http.statusCode == 401 {
-            // Token 过期，跳转登录
-            throw APIError.unauthorized
+        // 401 且有 refresh_token：尝试刷新后重试
+        if http.statusCode == 401 && retry {
+            if let refreshed = try? await refreshTokens() {
+                self.token = refreshed.token
+                self.refreshToken = refreshed.refresh_token
+                // 用新令牌重试原请求（不再重试）
+                return try await request(path, method: method, body: body, retry: false)
+            } else {
+                // 刷新也失败，需重新登录
+                throw APIError.unauthorized
+            }
         }
 
         if !(200...299).contains(http.statusCode) {
@@ -521,6 +677,38 @@ class APIClient {
         }
 
         return try JSONDecoder().decode(T.self, from: data)
+    }
+
+    /// 刷新令牌
+    private func refreshTokens() async throws -> AuthResponse {
+        guard let refreshToken else { throw APIError.unauthorized }
+
+        var request = URLRequest(url: URL(string: "\(baseURL)/auth/refresh")!)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONEncoder().encode(RefreshRequest(refresh_token: refreshToken))
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+
+        guard let http = response as? HTTPURLResponse,
+              (200...299).contains(http.statusCode) else {
+            throw APIError.unauthorized
+        }
+
+        return try JSONDecoder().decode(AuthResponse.self, from: data)
+    }
+
+    /// 退出登录
+    func logout() async throws {
+        guard let refreshToken else { return }
+        let _: ErrorResponse? = try? await request(
+            "/auth/logout",
+            method: "POST",
+            body: RefreshRequest(refresh_token: refreshToken),
+            retry: false
+        )
+        self.token = nil
+        self.refreshToken = nil
     }
 }
 
@@ -549,8 +737,9 @@ let auth: AuthResponse = try await APIClient.shared.request(
     body: RegisterRequest(username: "test", password: "123456")
 )
 APIClient.shared.token = auth.token
+APIClient.shared.refreshToken = auth.refresh_token
 
-// 获取诗词列表
+// 获取诗词列表（token 过期会自动刷新）
 let list: PoemListResponse = try await APIClient.shared.request(
     "/poems?dynasty=唐&page=1"
 )
@@ -572,36 +761,88 @@ let sync: SyncResponse = try await APIClient.shared.request(
 
 // 获取待复习
 let due: [LearningRecord] = try await APIClient.shared.request("/progress/due")
+
+// 退出登录
+try await APIClient.shared.logout()
 ```
 
 ---
 
-## 附录：典型数据流
+## 7. 令牌刷新流程
 
 ```
-┌─────────┐                          ┌─────────┐
-│  iOS App │                          │  Server  │
-└────┬─────┘                          └────┬─────┘
-     │                                     │
-     │  POST /auth/register                │
-     │  { username, password }             │
-     │────────────────────────────────────►│
-     │  { token, user }                    │
-     │◄────────────────────────────────────│
-     │                                     │
-     │  GET /poems?grade=3                 │  （带 Bearer Token）
-     │────────────────────────────────────►│
-     │  { poems, total, page }             │
-     │◄────────────────────────────────────│
-     │                                     │
-     │  POST /progress                     │  （学习完成后同步）
-     │  { records: [...] }                 │
-     │────────────────────────────────────►│
-     │  { synced, skipped }                │
-     │◄────────────────────────────────────│
-     │                                     │
-     │  GET /progress/due                  │  （检查待复习）
-     │────────────────────────────────────►│
-     │  [ learning_records... ]            │
-     │◄────────────────────────────────────│
+┌──────────┐                                   ┌──────────┐
+│  iOS App │                                   │  Server  │
+└─────┬────┘                                   └─────┬────┘
+      │                                              │
+      │  ① 请求受保护接口（带 access_token）          │
+      │─────────────────────────────────────────────►│
+      │                                              │
+      │       ② 返回 401（access_token 过期）         │
+      │◄─────────────────────────────────────────────│
+      │                                              │
+      │  ③ POST /auth/refresh                        │
+      │  { refresh_token }                           │
+      │─────────────────────────────────────────────►│
+      │                                              │
+      │       ④ 返回新令牌对                          │
+      │  { token, refresh_token, user }              │
+      │◄─────────────────────────────────────────────│
+      │                                              │
+      │  ⑤ 用新 access_token 重试原请求               │
+      │─────────────────────────────────────────────►│
+      │                                              │
+      │       ⑥ 返回业务数据                          │
+      │◄─────────────────────────────────────────────│
+      │                                              │
+```
+
+**刷新失败场景**（步骤 ④ 返回 401）：
+
+- refresh_token 过期（超过 30 天未使用）
+- refresh_token 已被轮换（被其他设备使用过）
+- 用户已修改密码
+- 用户已登出
+
+此时应清除本地所有令牌数据，跳转到登录页。
+
+> **并发请求处理**：多个请求同时收到 401 时，应只发起一次刷新，其余请求等待刷新完成后用新令牌重试。可用 `NSLock` 或 actor 保护刷新逻辑。
+
+---
+
+## 附录：完整数据流
+
+```
+┌──────────┐                                   ┌──────────┐
+│  iOS App │                                   │  Server  │
+└─────┬────┘                                   └─────┬────┘
+      │                                              │
+      │  POST /auth/register                         │
+      │  { username, password }                      │
+      │─────────────────────────────────────────────►│
+      │  { token, refresh_token, user }              │
+      │◄─────────────────────────────────────────────│
+      │                                              │
+      │  GET /poems?grade=3  （Bearer access_token）  │
+      │─────────────────────────────────────────────►│
+      │  { poems, total, page }                      │
+      │◄─────────────────────────────────────────────│
+      │                                              │
+      │  POST /progress  （学习完成后同步）             │
+      │  { records: [...] }                          │
+      │─────────────────────────────────────────────►│
+      │  { synced, skipped }                         │
+      │◄─────────────────────────────────────────────│
+      │                                              │
+      │  GET /progress/due  （检查待复习）              │
+      │─────────────────────────────────────────────►│
+      │  [ learning_records... ]                     │
+      │◄─────────────────────────────────────────────│
+      │                                              │
+      │  POST /auth/logout  （退出登录）               │
+      │  { refresh_token }                           │
+      │─────────────────────────────────────────────►│
+      │  { message }                                 │
+      │◄─────────────────────────────────────────────│
+      │                                              │
 ```
