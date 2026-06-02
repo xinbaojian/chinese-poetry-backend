@@ -78,7 +78,7 @@ pub async fn list_poems(
     // Fetch page
     let data_sql = concat!(
         "SELECT p.id, p.title, pt.name as poet_name, p.dynasty, p.category, p.grade, ",
-        "p.content, p.translation ",
+        "CAST(p.content AS CHAR) as content, p.translation ",
         "FROM poems p JOIN poets pt ON p.poet_id = pt.id ",
         "WHERE (? IS NULL OR p.title LIKE CONCAT('%', ?, '%')) ",
         "AND (? IS NULL OR p.dynasty = ?) ",
@@ -116,7 +116,7 @@ pub async fn get_poem(
 ) -> AppResult<Json<PoemItem>> {
     let sql = concat!(
         "SELECT p.id, p.title, pt.name as poet_name, p.dynasty, p.category, p.grade, ",
-        "p.content, p.translation ",
+        "CAST(p.content AS CHAR) as content, p.translation ",
         "FROM poems p JOIN poets pt ON p.poet_id = pt.id ",
         "WHERE p.id = ?"
     );
