@@ -3,9 +3,14 @@ FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 COPY frontend/package.json frontend/pnpm-lock.yaml* ./
-RUN npm install -g pnpm && pnpm install --frozen-lockfile || pnpm install
+
+# 先配国内镜像，再安装 Node 20 兼容的 pnpm 9
+RUN npm config set registry https://registry.npmmirror.com \
+    && npm install -g pnpm@9 \
+    && pnpm install --frozen-lockfile || pnpm install
 COPY frontend/ ./
-RUN pnpm build
+# pnpm-workspace.yaml 是 pnpm 10+ 的 allowBuilds 配置，pnpm 9 会误判为 workspace
+RUN rm -f pnpm-workspace.yaml && pnpm build
 
 # ---- Stage 2: Build Rust binary (with embedded frontend) ----
 FROM rust:1.88-bookworm AS backend-builder
