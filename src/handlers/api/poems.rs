@@ -84,7 +84,7 @@ pub async fn list_poems(
         "AND (? IS NULL OR p.dynasty = ?) ",
         "AND (? IS NULL OR p.category = ?) ",
         "AND (? IS NULL OR p.grade = ?) ",
-        "ORDER BY p.id DESC LIMIT ? OFFSET ?"
+        "ORDER BY p.id ASC LIMIT ? OFFSET ?"
     );
 
     let poems: Vec<PoemItem> = sqlx::query_as(data_sql)
